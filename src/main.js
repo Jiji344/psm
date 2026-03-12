@@ -1,5 +1,8 @@
 import './style.css'
-import logoUrl from './assets/logo.png'
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+import logo3DUrl from './assets/Ours Logo.glb?url';
 
 // Simple SPA router and state
 const App = {
@@ -9,6 +12,8 @@ const App = {
       { 
         id: 101, name: 'Quantum SaaS', domain: 'quantumsaas.com', sector: 'Cloud Infrastructure', score: 'Élevé', status: 'Enrichi',
         enrichment: {
+          lastEnriched: '12/03/2026',
+          summary: 'Éditeur de logiciels B2B spécialisé dans l\'infrastructure cloud haute performance pour les ETI.',
           identity: { size: '50-200 p.', location: 'Paris', founded: '2018' },
           tech: { stack: 'AWS, React, Node', maturity: 'Haut', team: '15-20' },
           recruitment: { offers: '3 actives', freq: 'Régulier' },
@@ -38,8 +43,16 @@ const App = {
     ],
     prospects: [
       { 
-        id: 201, name: 'Astra Biotech', domain: 'astra.bio', score: 'Élevé', responsible: 'Noé P.', lastContact: '10/03/2026', nextAction: 'Rappel devis', nextActionDate: '15/03/2026', status: 'Prospect', notes: 'Cherche une équipe de 5 développeurs React.', sector: 'Biotech',
+        id: 201, name: 'Astra Biotech', domain: 'astra.bio', score: 'Élevé', responsible: 'Noé P.', lastContact: '10/03/2026', nextAction: 'Rappel devis', nextActionDate: '15/03/2026', status: 'Prospect', sector: 'Biotech',
+        opportunities: 'Refonte portail client (Q3 2026).',
+        potentialMissions: 'Renfort équipe Front-End (3 ETP React).',
+        interactionHistory: [
+          { date: '10/03/2026', type: 'Appel', note: 'Mise en relation suite à prospection. Très réceptifs sur le besoin React.' },
+          { date: '05/03/2026', type: 'Email', note: 'Envoi plaquette de présentation Panda Services.' }
+        ],
         enrichment: {
+          lastEnriched: '01/03/2026',
+          summary: 'Entreprise de biotechnologie innovante développant des solutions d\'analyse génomique en cloud.',
           identity: { size: '200-500 p.', location: 'Bordeaux', founded: '2015' },
           tech: { stack: 'GCP, Angular, Java', maturity: 'Haut', team: '40+' },
           recruitment: { offers: '10 actives', freq: 'Élevé' },
@@ -52,13 +65,40 @@ const App = {
         }
       }
     ],
-    filterResponsible: ''
+    filterResponsible: '',
+    filterSector: ''
   },
 
   init() {
+    // Calcul automatique des scores selon la complétude dès le démarrage
+    this.state.leads.forEach(l => l.score = this.calculateScore(l));
+    this.state.prospects.forEach(p => p.score = this.calculateScore(p));
+    
+    // Initialisation du Dark Mode
+    this.state.isDarkMode = localStorage.getItem('darkMode') === 'true' || (!('darkMode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (this.state.isDarkMode) document.documentElement.classList.add('dark');
+
     this.renderLayout();
     this.handleRouting();
+    this.init3DLogo();
     window.addEventListener('popstate', () => this.handleRouting());
+  },
+
+  calculateScore(lead) {
+    if (!lead.enrichment) return 'Faible';
+    let points = 0;
+    const e = lead.enrichment;
+    
+    if (e.summary) points += 10;
+    if (e.identity) points += Object.values(e.identity).filter(v => v && v !== 'N/A' && v !== 'Non enrichi').length * 5;
+    if (e.tech) points += Object.values(e.tech).filter(v => v && v !== 'N/A' && v !== 'Non enrichi').length * 10;
+    if (e.recruitment) points += Object.values(e.recruitment).filter(v => v && v !== 'N/A' && v !== 'Non enrichi').length * 10;
+    if (e.contacts) points += Object.values(e.contacts).filter(v => v && v !== 'N/A' && v !== 'Non enrichi').length * 10;
+    if (e.decisionMakers && e.decisionMakers.length > 0) points += e.decisionMakers.length * 15;
+
+    if (points >= 70) return 'Élevé';
+    if (points >= 40) return 'Moyen';
+    return 'Faible';
   },
 
   handleRouting() {
@@ -78,9 +118,9 @@ const App = {
     document.querySelector('#app').innerHTML = `
       <div class="layout">
         <aside class="sidebar">
-          <div class="logo">
-            <img src="${logoUrl}" alt="Panda Services Logo">
-            <span>PandaLeads</span>
+          <div class="logo" style="flex-direction: column; gap: 4px; margin-bottom: 32px; padding: 0;">
+            <span style="font-size: 1.5rem; letter-spacing: -0.02em; color: white; display: block; text-align: center;">PandaLeads</span>
+            <div id="logo-3d-container" style="width: 180px; height: 180px; margin: 0 auto; margin-top: -10px;"></div>
           </div>
           <nav>
             <a href="/" onclick="event.preventDefault(); history.pushState({}, '', '/'); App.handleRouting();">Tableau de bord</a>
@@ -94,7 +134,12 @@ const App = {
             <div class="search-bar">
               <input type="text" placeholder="Rechercher...">
             </div>
-            <div class="user-profile">Noé P. (Admin)</div>
+            <div class="flex items-center gap-md">
+              <button id="theme-toggle-btn" class="btn btn-outline" onclick="App.toggleDarkMode()" style="border-radius: 50%; width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
+                ${this.state.isDarkMode ? '☀️' : '🌙'}
+              </button>
+              <div class="user-profile">Noé P. (Admin)</div>
+            </div>
           </header>
           <div id="view-content" class="fade-in"></div>
         </main>
@@ -225,7 +270,11 @@ const App = {
       <button onclick="document.getElementById('lead-modal').style.display='none'" style="position: absolute; top: 16px; right: 20px; background: none; border: none; color: var(--text-tertiary); font-size: 1.5rem; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-tertiary)'">✕</button>
       <div style="margin-bottom: var(--spacing-xl);">
         <h1 style="margin-bottom: 4px;">${lead.name}</h1>
-        <a href="https://${lead.domain}" target="_blank" style="color: var(--accent-primary); text-decoration: none; font-weight: 500;">🌐 ${lead.domain}</a>
+        <div class="flex items-center gap-md" style="margin-bottom: 12px;">
+          <a href="https://${lead.domain}" target="_blank" style="color: var(--accent-primary); text-decoration: none; font-weight: 500;">🌐 ${lead.domain}</a>
+          ${enriched?.lastEnriched ? `<span style="font-size: 0.8rem; color: var(--text-tertiary);">Enrichi le ${enriched.lastEnriched}</span>` : ''}
+        </div>
+        ${enriched?.summary ? `<div style="background: var(--bg-surface); padding: 12px 16px; border-radius: var(--radius-md); font-size: 0.9rem; color: var(--text-secondary); border-left: 3px solid var(--accent-primary);">${enriched.summary}</div>` : ''}
       </div>
 
       <div class="grid" style="grid-template-columns: 1fr 1fr; gap: var(--spacing-xl);">
@@ -301,6 +350,8 @@ const App = {
     setTimeout(() => {
       lead.status = 'Enrichi';
       lead.enrichment = {
+        lastEnriched: new Date().toLocaleDateString(),
+        summary: 'Startup en forte croissance dans le domaine logistique, cherchant à moderniser son SI.',
         identity: { size: '50-100 p.', location: 'Nantes', founded: '2019' },
         tech: { stack: 'Docker, Node, Vue', maturity: 'Moyenne', team: '8' },
         recruitment: { offers: '2 actives', freq: 'Faible' },
@@ -309,6 +360,8 @@ const App = {
           { name: 'Jean-Pierre Duval', role: 'Directeur Technique', phone: '+33 6 45 67 89 01', email: 'jp.duval@' + lead.domain, linkedin: 'linkedin.com/in/jpduval' }
         ]
       };
+      // Nouveau score basé sur les nouvelles données
+      lead.score = this.calculateScore(lead);
       this.renderLeads();
       alert(`Données pour ${lead.name} enrichies avec succès !`);
     }, 1500);
@@ -342,7 +395,7 @@ const App = {
       name,
       domain,
       sector: 'À qualifier',
-      score: 'N/A',
+      score: 'Faible',
       status: 'Nouveau',
       enrichment: null
     };
@@ -356,10 +409,17 @@ const App = {
     const container = document.querySelector('#view-content');
     const statuses = ['Lead', 'Prospect', 'RDV', 'Proposition', 'Mission', 'Perdu'];
     
+    // Logic for unique sectors
+    const sectors = [...new Set(this.state.prospects.map(p => p.sector).filter(Boolean))];
+
     // Filtered data
-    const filteredProspects = this.state.filterResponsible 
-      ? this.state.prospects.filter(p => p.responsible === this.state.filterResponsible)
-      : this.state.prospects;
+    let filteredProspects = this.state.prospects;
+    if (this.state.filterResponsible) {
+      filteredProspects = filteredProspects.filter(p => p.responsible === this.state.filterResponsible);
+    }
+    if (this.state.filterSector) {
+      filteredProspects = filteredProspects.filter(p => p.sector === this.state.filterSector);
+    }
 
     container.innerHTML = `
       <div class="flex justify-between items-center" style="margin-bottom: var(--spacing-xl);">
@@ -368,13 +428,17 @@ const App = {
           <p style="color: var(--text-secondary); font-size: 0.9rem;">${filteredProspects.length} opportunités actives</p>
         </div>
         <div class="flex gap-md">
-          <select id="filter-responsible" class="form-select" style="width: 200px;">
+          <select id="filter-sector" class="form-select" style="width: 200px;" onchange="App.state.filterSector=this.value; App.renderPipeline();">
+            <option value="">Tous les secteurs</option>
+            ${sectors.map(s => `<option value="${s}" ${this.state.filterSector === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+          <select id="filter-responsible" class="form-select" style="width: 200px;" onchange="App.state.filterResponsible=this.value; App.renderPipeline();">
             <option value="">Tous les responsables</option>
             <option value="Noé P." ${this.state.filterResponsible === 'Noé P.' ? 'selected' : ''}>Noé P.</option>
             <option value="Jean M." ${this.state.filterResponsible === 'Jean M.' ? 'selected' : ''}>Jean M.</option>
             <option value="Julie L." ${this.state.filterResponsible === 'Julie L.' ? 'selected' : ''}>Julie L.</option>
           </select>
-          <button class="btn btn-outline" onclick="App.state.filterResponsible=''; App.renderPipeline();">Réinitialiser</button>
+          <button class="btn btn-outline" onclick="App.state.filterResponsible=''; App.state.filterSector=''; App.renderPipeline();">Réinitialiser</button>
         </div>
       </div>
       
@@ -419,11 +483,6 @@ const App = {
         </div>
       </div>
     `;
-
-    document.getElementById('filter-responsible').addEventListener('change', (e) => {
-      this.state.filterResponsible = e.target.value;
-      this.renderPipeline();
-    });
   },
 
   showProspectDetails(id) {
@@ -451,7 +510,7 @@ const App = {
           
           <!-- Enriched Data Sections -->
           <div class="grid gap-md" style="grid-template-columns: 1fr 1fr; margin-bottom: var(--spacing-xl);">
-            <div class="glass-card" style="padding: var(--spacing-md); background: rgba(255,255,255,0.5);">
+            <div class="glass-card" style="padding: var(--spacing-md); background: var(--bg-surface);">
               <label style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Identité & Localisation</label>
               <div style="margin-top: 8px; font-size: 0.9rem;">
                 <div><span style="color: var(--text-secondary);">Taille:</span> ${enriched?.identity.size || 'N/A'}</div>
@@ -459,7 +518,7 @@ const App = {
                 <div><span style="color: var(--text-secondary);">Création:</span> ${enriched?.identity.founded || 'N/A'}</div>
               </div>
             </div>
-            <div class="glass-card" style="padding: var(--spacing-md); background: rgba(255,255,255,0.5);">
+            <div class="glass-card" style="padding: var(--spacing-md); background: var(--bg-surface);">
               <label style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Environnement Tech</label>
               <div style="margin-top: 8px; font-size: 0.9rem;">
                 <div><span style="color: var(--text-secondary);">Stack:</span> ${enriched?.tech.stack || 'N/A'}</div>
@@ -467,14 +526,14 @@ const App = {
                 <div><span style="color: var(--text-secondary);">Équipe:</span> ${enriched?.tech.team || 'N/A'}</div>
               </div>
             </div>
-            <div class="glass-card" style="padding: var(--spacing-md); background: rgba(255,255,255,0.5);">
+            <div class="glass-card" style="padding: var(--spacing-md); background: var(--bg-surface);">
               <label style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Recrutement</label>
               <div style="margin-top: 8px; font-size: 0.9rem;">
                 <div><span style="color: var(--text-secondary);">Offres:</span> ${enriched?.recruitment.offers || 'N/A'}</div>
                 <div><span style="color: var(--text-secondary);">Freq:</span> ${enriched?.recruitment.freq || 'N/A'}</div>
               </div>
             </div>
-            <div class="glass-card" style="padding: var(--spacing-md); background: rgba(255,255,255,0.5);">
+            <div class="glass-card" style="padding: var(--spacing-md); background: var(--bg-surface);">
               <label style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Contact & Web</label>
               <div style="margin-top: 8px; font-size: 0.9rem;">
                 <div><a href="https://${prospect.domain}" target="_blank" style="color: var(--accent-primary); text-decoration: none;">🌐 ${prospect.domain}</a></div>
@@ -495,12 +554,47 @@ const App = {
             `).join('') : '<p style="color: var(--text-secondary);">Aucun décisionnaire identifié.</p>'}
           </div>
 
-          <h3 style="margin-bottom: var(--spacing-md);">Historique & Notes</h3>
+          <div class="grid gap-md" style="grid-template-columns: 1fr 1fr; margin-bottom: var(--spacing-xl);">
+            <div class="glass-card" style="padding: var(--spacing-md); border-left: 3px solid var(--accent-primary);">
+              <label style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Opportunités identifiées</label>
+              <div style="margin-top: 8px; font-size: 0.9rem; color: var(--text-primary);">
+                ${prospect.opportunities || 'Aucune opportunité renseignée.'}
+              </div>
+            </div>
+            <div class="glass-card" style="padding: var(--spacing-md); border-left: 3px solid var(--accent-success);">
+              <label style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Missions potentielles</label>
+              <div style="margin-top: 8px; font-size: 0.9rem; color: var(--text-primary);">
+                ${prospect.potentialMissions || 'Aucune mission renseignée.'}
+              </div>
+            </div>
+          </div>
+
+          <h3 style="margin-bottom: var(--spacing-md);">Historique des échanges</h3>
           <div class="glass-card" style="padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); min-height: 200px;">
-            <p style="color: var(--text-primary); white-space: pre-wrap; margin-bottom: var(--spacing-lg);">${prospect.notes || 'Aucune note.'}</p>
-            <div style="margin-top: var(--spacing-lg); padding-top: var(--spacing-md); border-top: 1px solid var(--border-glass);">
-               <textarea id="temp-note" placeholder="Ajouter un commentaire..." style="width: 100%; padding: 12px; background: rgba(255,255,255,0.8); border: 1px solid var(--border-glass); border-radius: 8px; color: var(--text-primary); min-height: 80px;"></textarea>
-               <button class="btn btn-outline" style="margin-top: 8px;" onclick="App.addNote(${prospect.id})">Enregistrer la note</button>
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: var(--spacing-lg);">
+              ${(prospect.interactionHistory || []).map(interaction => `
+                <div style="padding-bottom: 12px; border-bottom: 1px solid var(--border-light);">
+                  <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 0.8rem; font-weight: 600; background: var(--bg-surface); padding: 2px 6px; border-radius: 4px;">${interaction.type}</span>
+                    <span style="font-size: 0.8rem; color: var(--text-secondary);">${interaction.date}</span>
+                  </div>
+                  <div style="font-size: 0.9rem; color: var(--text-primary);">${interaction.note}</div>
+                </div>
+              `).join('')}
+              ${(!prospect.interactionHistory || prospect.interactionHistory.length === 0) ? '<p style="color: var(--text-secondary); font-size: 0.9rem;">Aucun historique d\'échange.</p>' : ''}
+            </div>
+            
+            <div style="margin-top: var(--spacing-lg); padding-top: var(--spacing-md); border-top: 1px solid var(--border-medium);">
+               <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                 <select id="interaction-type" class="form-select" style="width: 120px;">
+                   <option>Appel</option>
+                   <option>Email</option>
+                   <option>RDV</option>
+                   <option>Note</option>
+                 </select>
+               </div>
+               <textarea id="temp-note" placeholder="Ajouter un compte-rendu d'échange..." style="width: 100%; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border-medium); border-radius: 8px; color: var(--text-primary); min-height: 80px;"></textarea>
+               <button class="btn btn-outline" style="margin-top: 8px;" onclick="App.addNote(${prospect.id})">Ajouter à l'historique</button>
             </div>
           </div>
         </div>
@@ -540,11 +634,17 @@ const App = {
 
   addNote(id) {
     const noteEl = document.getElementById('temp-note');
+    const typeEl = document.getElementById('interaction-type');
     if (!noteEl || !noteEl.value) return;
     
     const prospect = this.state.prospects.find(p => p.id === id);
     if (prospect) {
-      prospect.notes = (prospect.notes || '') + '\n\n' + new Date().toLocaleString() + ' : ' + noteEl.value;
+      if (!prospect.interactionHistory) prospect.interactionHistory = [];
+      prospect.interactionHistory.push({
+        date: new Date().toLocaleDateString(),
+        type: typeEl ? typeEl.value : 'Note',
+        note: noteEl.value
+      });
       this.renderProspectModal(prospect);
     }
   },
@@ -570,42 +670,147 @@ const App = {
     return 'var(--accent-danger)';
   },
 
+  init3DLogo() {
+    const container = document.getElementById('logo-3d-container');
+    if (!container) return;
+
+    // Set up scene, camera, renderer
+    const scene = new THREE.Scene();
+    
+    // Le ratio doit correspondre exactement au conteneur pour ne pas écraser la scène
+    const aspect = container.clientWidth / container.clientHeight;
+    const camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+    camera.position.z = 5;
+
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    // Clear container (for hot reloads in dev)
+    container.innerHTML = '';
+    container.appendChild(renderer.domElement);
+
+    // Add lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+    scene.add(ambientLight);
+    
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+    directionalLight.position.set(2, 2, 5);
+    scene.add(directionalLight);
+
+    let model = null;
+    let targetRotationX = 0;
+    let targetRotationY = 0;
+
+    // Load GLTF
+    const loader = new GLTFLoader();
+    loader.load(
+      logo3DUrl,
+      (gltf) => {
+        model = gltf.scene;
+        
+        // Center the model
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        model.position.x += (model.position.x - center.x);
+        model.position.y += (model.position.y - center.y);
+        model.position.z += (model.position.z - center.z);
+        
+        // Scale appropriately
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 2.8 / maxDim; // Adjust so it fits in the view sans couper
+        model.scale.set(scale, scale, scale);
+        
+        // Set initial rotation to face the user
+        // You might need to adjust these offsets depending on how the initial model was exported
+        model.rotation.x = 0; 
+        model.rotation.y = 0;
+
+        scene.add(model);
+      },
+      undefined,
+      (error) => {
+        console.error('An error happened loading the 3D logo:', error);
+      }
+    );
+
+    // Mouse movement logic
+    const handleMouseMove = (event) => {
+      // Calculate mouse position relative to center of screen, from -1 to 1
+      const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+      const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      // Map mouse position to target rotation (restrict rotation angle)
+      targetRotationY = mouseX * 0.2; // Max rotation angle horizontally (reduced)
+      targetRotationX = -mouseY * 0.1; // Max rotation angle vertically (reduced)
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+
+    // Animation loop
+    const animate = () => {
+      requestAnimationFrame(animate);
+
+      if (model) {
+        // Smoothly interpolate current rotation to target rotation
+        model.rotation.y += (targetRotationY - model.rotation.y) * 0.05;
+        model.rotation.x += (targetRotationX - model.rotation.x) * 0.05;
+      }
+
+      renderer.render(scene, camera);
+    };
+
+    animate();
+
+    // Handle resize
+    const handleResize = () => {
+      if (!container) return;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      if(width === 0 || height === 0) return;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    };
+    window.addEventListener('resize', handleResize);
+  },
+
   renderScoring() {
     const container = document.querySelector('#view-content');
     container.innerHTML = `
       <div style="margin-bottom: var(--spacing-xl);">
         <h1>Configuration du Scoring</h1>
-        <p>Définissez les pondérations pour le calcul automatique de la maturité des leads.</p>
+        <p>Le scoring est désormais basé dynamiquement sur l'algorithme de <strong>complétude des informations</strong> du lead.</p>
       </div>
 
       <div class="grid" style="grid-template-columns: 1fr 1fr; gap: var(--spacing-xl);">
         <div class="glass-card" style="padding: var(--spacing-xl);">
-          <h3 style="margin-bottom: var(--spacing-lg);">Critères de pondération</h3>
-          <div class="grid gap-md">
-            ${['Maturité Technique', 'Recrutement Actif', 'Taille Entreprise', 'Secteur Prioritaire'].map(criterion => `
-              <div class="flex justify-between items-center">
-                <label>${criterion}</label>
-                <input type="range" min="0" max="100" value="50" style="width: 150px;">
-              </div>
-            `).join('')}
-          </div>
-          <button class="btn btn-primary" style="margin-top: var(--spacing-xl); width: 100%;">Sauvegarder la configuration</button>
+          <h3 style="margin-bottom: var(--spacing-lg);">Critères d'attribution des points</h3>
+          <ul style="color: var(--text-secondary); line-height: 2; padding-left: 20px;">
+            <li><b>Résumé de l'entreprise :</b> +10 pts</li>
+            <li><b>Données d'identité :</b> +5 pts par info trouvée (taille, ville, etc.)</li>
+            <li><b>Environnement tech :</b> +10 pts par info trouvée (stack, équipe, maturité)</li>
+            <li><b>Recrutement actif :</b> +10 pts par info trouvée (offres)</li>
+            <li><b>Coordonnées & Web :</b> +10 pts par contact (email, linkedin)</li>
+            <li><b>Décisionnaires :</b> +15 pts par prospect clé identifié</li>
+          </ul>
         </div>
 
         <div class="glass-card" style="padding: var(--spacing-xl);">
           <h3 style="margin-bottom: var(--spacing-lg);">Aperçu de la segmentation</h3>
           <div style="display: flex; flex-direction: column; gap: var(--spacing-md);">
             <div style="padding: var(--spacing-md); border-left: 4px solid var(--accent-success); background: rgba(63, 185, 80, 0.05);">
-              <div style="font-weight: 700; color: var(--accent-success);">SCORE ÉLEVÉ (> 80)</div>
-              <div style="font-size: 0.85rem;">Priorité immédiate. Passage auto en prospect.</div>
+              <div style="font-weight: 700; color: var(--accent-success);">SCORE ÉLEVÉ (> 70 pts)</div>
+              <div style="font-size: 0.85rem;">Profil très qualifié. Données complètes. Passage automatique en prospect suggéré.</div>
             </div>
             <div style="padding: var(--spacing-md); border-left: 4px solid var(--accent-warning); background: rgba(210, 153, 34, 0.05);">
-              <div style="font-weight: 700; color: var(--accent-warning);">SCORE MOYEN (40-80)</div>
-              <div style="font-size: 0.85rem;">Nurturing nécessaire. Qualification manuelle.</div>
+              <div style="font-weight: 700; color: var(--accent-warning);">SCORE MOYEN (40-70 pts)</div>
+              <div style="font-size: 0.85rem;">Profil partiellement renseigné. Des informations manquent.</div>
             </div>
             <div style="padding: var(--spacing-md); border-left: 4px solid var(--accent-danger); background: rgba(248, 81, 73, 0.05);">
-              <div style="font-weight: 700; color: var(--accent-danger);">SCORE FAIBLE (< 40)</div>
-              <div style="font-size: 0.85rem;">Veille stratégique uniquement.</div>
+              <div style="font-weight: 700; color: var(--accent-danger);">SCORE FAIBLE (< 40 pts)</div>
+              <div style="font-size: 0.85rem;">Très peu d'informations. Enrichissement insuffisant ou entreprise indétectable.</div>
             </div>
           </div>
         </div>
@@ -623,13 +828,31 @@ const App = {
       status: 'Prospect',
       responsible: 'Noé P.',
       lastContact: new Date().toLocaleDateString(),
-      pipeline: 'En attente'
+      pipeline: 'En attente',
+      interactionHistory: [],
+      opportunities: '',
+      potentialMissions: ''
     };
     
     this.state.prospects.push(newProspect);
     this.state.leads = this.state.leads.filter(l => l.id !== leadId);
     alert(`${lead.name} a été transféré au Pipeline Prospects.`);
-    if (window.location.pathname === '/leads') this.refreshLeadsList();
+    if (window.location.pathname === '/leads') this.handleRouting();
+  },
+
+  toggleDarkMode() {
+    this.state.isDarkMode = !this.state.isDarkMode;
+    const btn = document.getElementById('theme-toggle-btn');
+    
+    if (this.state.isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('darkMode', 'true');
+      if (btn) btn.innerHTML = '☀️';
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('darkMode', 'false');
+      if (btn) btn.innerHTML = '🌙';
+    }
   }
 };
 

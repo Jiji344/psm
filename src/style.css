@@ -48,6 +48,24 @@
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
 }
 
+:root.dark {
+  --bg-primary: #0f172a; 
+  --bg-secondary: #1e293b;
+  --bg-surface: #334155;
+  
+  --border-light: rgba(255, 255, 255, 0.05);
+  --border-medium: rgba(255, 255, 255, 0.1);
+  --border-focus: rgba(26, 188, 156, 0.6);
+  
+  --sidebar-bg: #020617;
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
+  
+  --glow-primary: rgba(26, 188, 156, 0.3);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -64,6 +82,11 @@ body {
   line-height: 1.5;
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.glass-card, .btn, .saas-table th, .saas-table td, .pipeline-column, .top-nav, .sidebar, .form-input, .form-select, .form-textarea, .modal-content {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* ==================== LAYOUT ==================== */
@@ -136,6 +159,7 @@ body {
   z-index: 5;
   padding-top: var(--spacing-md);
   padding-bottom: var(--spacing-sm);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .search-bar input {
